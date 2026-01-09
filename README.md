@@ -72,35 +72,37 @@ Click **Apply** and wait for installation.
 ## 🧪 Step 4: Accept Android Licenses
 
 In VS Code Terminal:
-    ```bash
-    flutter doctor --android-licenses
-
+ ```bash
+ flutter doctor --android-licenses
+```
 type y for all prompts.
 
 Re-check:
-    ```bash
-    flutter doctor
+ ```bash
+ flutter doctor
+```
 
 You should now see
-    ```bash
-    [✓] Android toolchain - develop for Android devices
-
+ ```bash
+ [✓] Android toolchain - develop for Android devices
+```
 ---
 
 ## 🚀 Step 5: Create the Flutter Project
 
 Open the project folder in VS Code and run:
-    ```bash
-    flutter create .
+ ```bash
+ flutter create .
+```
 
 This generates
-    ```bash
-    lib/
-    android/
-    ios/
-    windows/
-    pubspec.yaml
-
+ ```bash
+ lib/
+ android/
+ ios/
+ windows/
+ pubspec.yaml
+```
 ---
 
 ## ▶️ Step 6: Run the App
@@ -108,8 +110,9 @@ This generates
 Make sure the Android emulator is running.
 
 Then in VS Code terminal:
-    ```bash
-    flutter run
+ ```bash
+ flutter run
+```
 
 The app will build and launch on the emulator
 
@@ -118,8 +121,9 @@ The app will build and launch on the emulator
 ## 🧩 Step 7: Main Entry File
 
 The app starts from:
-    ```bash
-    lib/main.dart
+ ```bash
+ lib/main.dart
+```
 
 Any UI or logic changes should be made in this file or files inside the lib/ directory.
 
@@ -134,14 +138,16 @@ Or press R in terminal for full restart
 ## 🧹 Useful Commands
 
 Clean and rebuild:
-    ```bash
-    flutter clean
-    flutter pub get
-    flutter run
+ ```bash
+ flutter clean
+ flutter pub get
+ flutter run
+```
 
 Check devices:
-    ```bash
-    flutter devices
+ ```bash
+ flutter devices
+```
 
 ---
 
