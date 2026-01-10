@@ -1,7 +1,17 @@
 # =====================
-# Environment variables
+# Environment variables & Secrets
 # =====================
 .env
+.env*
+**/*.env*
+*-local
+secrets.json
+
+# Firebase / Google Config (contains API keys)
+google-services.json
+GoogleService-Info.plist
+**/android/app/google-services.json
+**/ios/Runner/GoogleService-Info.plist
 
 # =====================
 # Python
