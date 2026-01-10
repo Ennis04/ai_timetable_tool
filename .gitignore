@@ -1,0 +1,47 @@
+# =====================
+# Environment variables
+# =====================
+.env
+
+# =====================
+# Python
+# =====================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.env/
+*.sqlite3
+
+# =====================
+# Flutter / Dart
+# =====================
+.dart_tool/
+.packages
+.pub/
+build/
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+
+# Android
+android/.gradle/
+android/local.properties
+android/key.properties
+android/app/build/
+
+# macOS / Windows
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# =====================
+# IDE
+# =====================
+.vscode/
+.idea/
