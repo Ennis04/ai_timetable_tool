@@ -6,6 +6,7 @@ import '../models/calendar_event.dart';
 import '../storage/event_store.dart';
 import '../widgets/event_tile.dart';
 import 'event_editor.dart';
+import 'ai_assistant_screen.dart';
 
 class CalendarHomeScreen extends StatefulWidget {
   const CalendarHomeScreen({super.key});
@@ -59,6 +60,19 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
     await _loadDay(_selectedDay);
   }
 
+  // ✅ NEW: open AI and refresh after Apply
+  Future<void> _openAiAssistant() async {
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const AiAssistantScreen()),
+    );
+
+    if (changed == true) {
+      // refresh current selected day
+      await _loadDay(_selectedDay);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final header = DateFormat('EEEE, d MMM').format(_selectedDay);
@@ -72,6 +86,13 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
           'AIT³',
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'AI Assistant',
+            onPressed: _openAiAssistant,
+            icon: const Icon(Icons.auto_awesome),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _addEvent,
@@ -105,7 +126,6 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
               onPageChanged: (focused) => _focusedDay = focused,
             ),
           ),
-
           const SizedBox(height: 18),
           Text(header, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),

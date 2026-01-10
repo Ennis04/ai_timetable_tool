@@ -7,6 +7,7 @@ import 'screens/calendar_home.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
+
   Hive.registerAdapter(CalendarEventAdapter());
 
   runApp(const MyApp());
@@ -19,7 +20,10 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(useMaterial3: true),
+      theme: ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: Colors.blue,
+      ),
       home: const CalendarHomeScreen(),
     );
   }
