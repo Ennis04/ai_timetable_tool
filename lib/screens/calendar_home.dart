@@ -6,6 +6,7 @@ import '../models/calendar_event.dart';
 import '../storage/event_store.dart';
 import '../widgets/event_tile.dart';
 import 'event_editor.dart';
+import 'voice_dialog.dart';
 
 class CalendarHomeScreen extends StatefulWidget {
   const CalendarHomeScreen({super.key});
@@ -34,7 +35,71 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
     setState(() => _dayEvents = events);
   }
 
-  Future<void> _addEvent() async {
+  // --- NEW: This handles the Menu Selection ---
+  void _showAddOptions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.edit_note),
+                title: const Text('Manual Entry'),
+                subtitle: const Text('Type details yourself'),
+                onTap: () {
+                  Navigator.pop(context); // Close the menu
+                  _addEventManually(); // Run original logic
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.mic_rounded),
+                title: const Text('Voice to Event'),
+                subtitle: const Text('Use AI to parse speech'),
+                onTap: () async {
+                  Navigator.pop(context); // Close the menu
+
+                  // 1. Show the voice dialog and wait for result
+                  final result = await showModalBottomSheet<CalendarEvent>(
+                    context: context,
+                    isScrollControlled: true,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                    ),
+                    builder: (context) => const VoiceEntryDialog(),
+                  );
+
+                  // 2. If we got an event back, open the editor for verification
+                  if (result != null) {
+                    // We use _editEvent because it handles the UI navigation and saving
+                    _editEvent(result);
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.add_a_photo_rounded),
+                title: const Text('Scan Image'),
+                subtitle: const Text('Upload or snap a schedule'),
+                onTap: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Image AI coming soon!')),
+                  );
+                  // TODO: Trigger Image Logic here later
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // --- RENAMED: This is the original logic ---
+  Future<void> _addEventManually() async {
     final created = await Navigator.push<CalendarEvent>(
       context,
       MaterialPageRoute(builder: (_) => EventEditorScreen(initialDay: _selectedDay)),
@@ -73,8 +138,9 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
+      // UPDATED: Now calls _showAddOptions
       floatingActionButton: FloatingActionButton(
-        onPressed: _addEvent,
+        onPressed: _showAddOptions,
         child: const Icon(Icons.add),
       ),
       body: ListView(
@@ -156,7 +222,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                   child: EventTile(event: e, onTap: () => _editEvent(e)),
                 ),
               );
-            }).toList(),
+            }),
         ],
       ),
     );
