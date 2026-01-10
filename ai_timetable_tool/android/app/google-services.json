@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "192764859580",
+    "project_id": "ennis-lam",
+    "storage_bucket": "ennis-lam.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:192764859580:android:adfbcd0394ff62055cecb9",
+        "android_client_info": {
+          "package_name": "com.nj.ait3"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAtzFW55Xd3XXJsCvHWhn78Pgb3evZvH5Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
