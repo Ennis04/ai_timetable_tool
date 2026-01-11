@@ -21,6 +21,8 @@ If you are joining the project, follow these steps to get the latest features:
 3. **Google Calendar Sync Setup:**
    - Please refer to [Google Sync Guide](file:///C:/Users/ennis/.gemini/antigravity/brain/a88b7f39-509c-4bac-9b29-62d37279b963/fix_error_10.md) for detailed steps on registering your SHA-1.
 
+---
+
 ## 📦 Requirements
 
 Before running this project, make sure you have the following installed:
