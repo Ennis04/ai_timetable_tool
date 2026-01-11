@@ -80,7 +80,7 @@ def parse_prompt(prompt: Prompt):
             content_parts.append(image_part)
 
         resp = client.models.generate_content(
-            model="gemini-2.0-flash", # Using the latest recommended model
+            model="gemini-2.5-flash",
             contents=content_parts,
             config={
                 "temperature": 0.2,

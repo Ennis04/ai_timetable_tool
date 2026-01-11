@@ -36,6 +36,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
 
   // Parsed actions (preview)
   List<_AiCreateAction> _preview = [];
+  Set<int> _selectedIndices = {};
 
   // Quick prompts
   final List<String> _suggestions = const [
@@ -119,6 +120,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     setState(() {
       _loading = true;
       _preview = [];
+      _selectedIndices.clear();
 
       // Create a user message for the chat bubble
       String displayMsg = text;
@@ -183,6 +185,8 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         _loading = false;
         _selectedImage = null; // Clear image after successful send
         _preview = parsed;
+        // Default select all
+        _selectedIndices = List.generate(parsed.length, (i) => i).toSet();
 
         if (parsed.isEmpty) {
           _chat.add(
@@ -218,11 +222,21 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       return;
     }
 
+    if (_selectedIndices.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select at least one event.")),
+      );
+      return;
+    }
+
     final store = EventStore();
     final eventsToAdd = <CalendarEvent>[];
 
     // Build the list of events
-    for (final a in _preview) {
+    for (int i = 0; i < _preview.length; i++) {
+      if (!_selectedIndices.contains(i)) continue;
+      final a = _preview[i];
+
       final repeat = a.repeat;
       final count = a.count;
 
@@ -396,6 +410,206 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     super.dispose();
   }
 
+  // --- RECOMMENDATION ENGINE ---
+  void _showRecommendationDialog() {
+    final taskController = TextEditingController();
+    final durationController = TextEditingController(text: "1 hour");
+    final prefsController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Get Recommendations"),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: taskController,
+                decoration: const InputDecoration(
+                  labelText: "Task Name",
+                  hintText: "e.g., Gym, Study, Meeting",
+                ),
+                autofocus: true,
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: durationController,
+                decoration: const InputDecoration(
+                  labelText: "Duration",
+                  hintText: "e.g., 2 hours, 30 mins",
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: prefsController,
+                decoration: const InputDecoration(
+                  labelText: "Preferences (Optional)",
+                  hintText: "e.g., After 5pm, Weekdays only",
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final task = taskController.text.trim();
+              final duration = durationController.text.trim();
+              final prefs = prefsController.text.trim();
+
+              if (task.isEmpty) return;
+
+              Navigator.pop(ctx);
+              _fetchAndSuggest(task, duration, prefs);
+            },
+            child: const Text("Suggest"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _fetchAndSuggest(
+    String task,
+    String duration,
+    String prefs,
+  ) async {
+    setState(() {
+      _loading = true;
+      _chat.add(
+        _ChatItem.user(
+          "Recommend slots for '$task' ($duration). Prefs: ${prefs.isEmpty ? 'None' : prefs}",
+        ),
+      );
+    });
+    _scrollToBottom();
+
+    try {
+      // 1. Fetch upcoming events (next 7 days)
+      final store = EventStore();
+      final now = DateTime.now();
+      // final end = now.add(const Duration(days: 7)); // Unused
+
+      // We need a way to get range, but existing is byDay.
+      // Iterating 7 days is simple enough.
+      final upcomingEvents = <CalendarEvent>[];
+      for (int i = 0; i < 7; i++) {
+        final dayEvents = await store.byDay(now.add(Duration(days: i)));
+        upcomingEvents.addAll(dayEvents);
+      }
+
+      // 2. Format schedule string
+      final sb = StringBuffer();
+      if (upcomingEvents.isEmpty) {
+        sb.writeln("My schedule is completely free for the next 7 days.");
+      } else {
+        sb.writeln(
+          "Here is my existing schedule for the next 7 days (Do not overlap these):",
+        );
+        for (final e in upcomingEvents) {
+          final timeStr =
+              "${DateFormat('EEE HH:mm').format(e.start)} - ${DateFormat('HH:mm').format(e.end)}";
+          sb.writeln("- $timeStr: ${e.title}");
+        }
+      }
+
+      // 3. Construct Prompt
+      final prompt =
+          """
+I need to schedule '$task' for a duration of $duration.
+My preferences: ${prefs.isEmpty ? 'None' : prefs}.
+
+$sb
+
+Based on this, suggest 3 optimal time slots.
+Return them as 'create' actions in the JSON.
+""";
+
+      // 4. Send to backend (simulated by updating controller and calling existing logic,
+      // but we need to bypass the UI input)
+
+      // Actually, we can just call the HTTP logic directly.
+      // Let's refactor _send to be usable or just copy the http part specifically for this.
+      // Re-using _send via _controller is hacky but ensures we use the exact same backend logic.
+      // A cleaner way is to extract the API call. For now, let's just make the API call here to separate concerns.
+
+      // Helper to avoid code dup later if we refactor.
+      await _sendRawPrompt(prompt);
+    } catch (e) {
+      setState(() {
+        _loading = false;
+        _chat.add(
+          _ChatItem.assistant(
+            "Error getting recommendations: $e",
+            isError: true,
+          ),
+        );
+      });
+      _scrollToBottom();
+    }
+  }
+
+  // Refactored from _send to allow raw text sending
+  Future<void> _sendRawPrompt(String text) async {
+    // IMPORTANT: Use 10.0.2.2 for Android Emulator. Use your Real IP for physical devices.
+    const String apiUrl = "http://10.0.2.2:8000/ai/parse";
+
+    try {
+      final response = await http.post(
+        Uri.parse(apiUrl),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"text": text, "image": null}),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception(
+          "Backend error: ${response.statusCode}\n${response.body}",
+        );
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map && decoded.containsKey('error')) {
+        throw Exception(decoded['error']);
+      }
+
+      final actions = decoded['actions'];
+      if (actions is! List) {
+        throw Exception("Invalid response: 'actions' is not a list");
+      }
+
+      final parsed = <_AiCreateAction>[];
+      for (final a in actions) {
+        if (a is! Map) continue;
+        if (a['type'] != 'create') continue;
+        parsed.add(_AiCreateAction.fromJson(Map<String, dynamic>.from(a)));
+      }
+
+      setState(() {
+        _loading = false;
+        _preview = parsed;
+        _selectedIndices = List.generate(parsed.length, (i) => i).toSet();
+
+        if (parsed.isEmpty) {
+          _chat.add(_ChatItem.assistant("I couldn't find any good slots."));
+        } else {
+          _chat.add(
+            _ChatItem.assistant(
+              "I found ${_preview.length} suggestion(s). Tap Apply to add one.",
+            ),
+          );
+        }
+      });
+      _scrollToBottom();
+    } catch (e) {
+      rethrow; // Let caller handle
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
@@ -414,6 +628,15 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                 onPressed: _apply,
                 icon: const Icon(Icons.check),
                 label: const Text("Apply"),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: IconButton(
+                icon: const Icon(Icons.lightbulb_outline, color: Colors.amber),
+                tooltip: "Get AI Recommendations",
+                onPressed: _showRecommendationDialog,
               ),
             ),
         ],
@@ -460,7 +683,23 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                       subtitle: "${_preview.length} event(s)",
                     ),
                     const SizedBox(height: 10),
-                    ..._preview.map((a) => _PreviewCard(action: a)),
+                    ..._preview.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final a = entry.value;
+                      return _PreviewCard(
+                        action: a,
+                        isSelected: _selectedIndices.contains(i),
+                        onToggle: (val) {
+                          setState(() {
+                            if (val == true) {
+                              _selectedIndices.add(i);
+                            } else {
+                              _selectedIndices.remove(i);
+                            }
+                          });
+                        },
+                      );
+                    }),
                   ],
                 ],
               ),
@@ -743,7 +982,14 @@ class _SectionHeader extends StatelessWidget {
 
 class _PreviewCard extends StatelessWidget {
   final _AiCreateAction action;
-  const _PreviewCard({required this.action});
+  final bool isSelected;
+  final ValueChanged<bool?>? onToggle;
+
+  const _PreviewCard({
+    required this.action,
+    this.isSelected = true,
+    this.onToggle,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -751,69 +997,75 @@ class _PreviewCard extends StatelessWidget {
     final start = fmt.format(action.start);
     final endTime = DateFormat('HH:mm').format(action.end);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.black12),
-        boxShadow: const [
-          BoxShadow(
-            blurRadius: 10,
-            offset: Offset(0, 6),
-            color: Color(0x0A000000),
+    return InkWell(
+      onTap: () => onToggle?.call(!isSelected),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: isSelected ? Colors.blue : Colors.black12,
+            width: isSelected ? 2 : 1,
           ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 10,
-            height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xFF007AFF),
-              borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(
+              blurRadius: 10,
+              offset: const Offset(0, 6),
+              color: const Color(0x0A000000),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  action.title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  "$start – $endTime",
-                  style: const TextStyle(color: Colors.black54),
-                ),
-                if (action.location.isNotEmpty) ...[
-                  const SizedBox(height: 4),
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Checkbox logic replacing indicator
+            Padding(
+              padding: const EdgeInsets.only(right: 8, top: 4),
+              child: Icon(
+                isSelected ? Icons.check_circle : Icons.circle_outlined,
+                color: isSelected ? Colors.blue : Colors.grey.shade400,
+              ),
+            ),
+
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    action.location,
+                    action.title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    "$start – $endTime",
                     style: const TextStyle(color: Colors.black54),
                   ),
-                ],
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _Tag(label: "Repeat: ${action.repeat}"),
-                    _Tag(label: "Count: ${action.count}"),
+                  if (action.location.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      action.location,
+                      style: const TextStyle(color: Colors.black54),
+                    ),
                   ],
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _Tag(label: "Repeat: ${action.repeat}"),
+                      _Tag(label: "Count: ${action.count}"),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
