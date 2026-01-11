@@ -42,11 +42,12 @@ Before running this project, make sure you have the following installed:
     ```bash
     Flutter: New Project
     Flutter: Run Flutter Doctor
+    ```
 6. Follow the prompts to install Flutter SDK automatically
     Verify installation:
     ```bash
     flutter doctor
-
+    ```
 
 
 2️⃣ Android Studio Setup
@@ -220,7 +221,9 @@ Check devices
     .env missing or not registered in pubspec.yaml
 2. No notifications
     Emulator time incorrect
+
     Notification permission not granted
+
     Event scheduled in the past
 
 ---
