@@ -7,6 +7,7 @@ import '../storage/event_store.dart';
 import '../widgets/event_tile.dart';
 import 'event_editor.dart';
 import 'ai_assistant_screen.dart';
+import '../services/google_calendar_service.dart';
 
 class CalendarHomeScreen extends StatefulWidget {
   const CalendarHomeScreen({super.key});
@@ -22,6 +23,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
   DateTime _selectedDay = DateTime.now();
 
   List<CalendarEvent> _dayEvents = [];
+  bool _isSyncing = false;
 
   @override
   void initState() {
@@ -38,7 +40,9 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
   Future<void> _addEvent() async {
     final created = await Navigator.push<CalendarEvent>(
       context,
-      MaterialPageRoute(builder: (_) => EventEditorScreen(initialDay: _selectedDay)),
+      MaterialPageRoute(
+        builder: (_) => EventEditorScreen(initialDay: _selectedDay),
+      ),
     );
     if (created == null) return;
     await store.upsert(created);
@@ -48,7 +52,10 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
   Future<void> _editEvent(CalendarEvent e) async {
     final updated = await Navigator.push<CalendarEvent>(
       context,
-      MaterialPageRoute(builder: (_) => EventEditorScreen(initialDay: _selectedDay, existing: e)),
+      MaterialPageRoute(
+        builder: (_) =>
+            EventEditorScreen(initialDay: _selectedDay, existing: e),
+      ),
     );
     if (updated == null) return;
     await store.upsert(updated);
@@ -73,6 +80,41 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
     }
   }
 
+  Future<void> _syncGoogle() async {
+    setState(() => _isSyncing = true);
+
+    // Optional feedback
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Syncing with Google Calendar...'),
+        duration: Duration(seconds: 1),
+      ),
+    );
+
+    try {
+      await GoogleCalendarService().signInAndLoadEvents();
+      await _loadDay(_selectedDay);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Sync complete!')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sync failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSyncing = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final header = DateFormat('EEEE, d MMM').format(_selectedDay);
@@ -87,6 +129,17 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Sync Google Calendar',
+            onPressed: _isSyncing ? null : _syncGoogle,
+            icon: _isSyncing
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.sync),
+          ),
           IconButton(
             tooltip: 'AI Assistant',
             onPressed: _openAiAssistant,
@@ -127,13 +180,19 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          Text(header, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          Text(
+            header,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 10),
 
           if (_dayEvents.isEmpty)
             const Padding(
               padding: EdgeInsets.only(top: 12),
-              child: Text('No events. Tap + to add one.', style: TextStyle(color: Colors.grey)),
+              child: Text(
+                'No events. Tap + to add one.',
+                style: TextStyle(color: Colors.grey),
+              ),
             )
           else
             ..._dayEvents.map((e) {
@@ -166,8 +225,14 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                         title: const Text('Delete event?'),
                         content: Text('Delete "${e.title}"?'),
                         actions: [
-                          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-                          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('Delete'),
+                          ),
                         ],
                       ),
                     );

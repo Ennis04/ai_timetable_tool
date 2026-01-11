@@ -38,4 +38,28 @@ class EventStore {
     events.sort((a, b) => a.start.compareTo(b.start));
     return events;
   }
+
+  /// Syncs Google events into the local store, avoiding duplicates by googleId.
+  Future<void> syncGoogleEvents(List<CalendarEvent> incoming) async {
+    final box = await _box();
+    final allEvents = box.values.toList();
+
+    for (final incomingEvent in incoming) {
+      if (incomingEvent.googleId == null) continue;
+
+      // Find existing event with same googleId
+      final existingIndex = allEvents.indexWhere(
+        (e) => e.googleId == incomingEvent.googleId,
+      );
+
+      if (existingIndex != -1) {
+        // Update existing (preserving the same local id if we want, or just overwriting)
+        final existing = allEvents[existingIndex];
+        await box.put(existing.id, incomingEvent.copyWith());
+      } else {
+        // Add new
+        await box.put(incomingEvent.id, incomingEvent);
+      }
+    }
+  }
 }

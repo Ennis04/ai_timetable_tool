@@ -7,6 +7,7 @@ class CalendarEvent {
   final DateTime end;
   final String location;
   final int colorValue;
+  final String? googleId;
 
   CalendarEvent({
     required this.id,
@@ -15,6 +16,7 @@ class CalendarEvent {
     required this.end,
     this.location = '',
     this.colorValue = 0xFF007AFF,
+    this.googleId,
   });
 
   CalendarEvent copyWith({
@@ -23,6 +25,7 @@ class CalendarEvent {
     DateTime? end,
     String? location,
     int? colorValue,
+    String? googleId,
   }) {
     return CalendarEvent(
       id: id,
@@ -31,6 +34,7 @@ class CalendarEvent {
       end: end ?? this.end,
       location: location ?? this.location,
       colorValue: colorValue ?? this.colorValue,
+      googleId: googleId ?? this.googleId,
     );
   }
 }
@@ -51,16 +55,19 @@ class CalendarEventAdapter extends TypeAdapter<CalendarEvent> {
       id: (fields[0] as String?) ?? '',
       title: (fields[1] as String?) ?? 'Untitled',
       start: (fields[2] as DateTime?) ?? DateTime.now(),
-      end: (fields[3] as DateTime?) ?? DateTime.now().add(const Duration(hours: 1)),
+      end:
+          (fields[3] as DateTime?) ??
+          DateTime.now().add(const Duration(hours: 1)),
       location: (fields[4] as String?) ?? '',
       colorValue: (fields[5] as int?) ?? 0xFF007AFF,
+      googleId: fields[6] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, CalendarEvent obj) {
     writer
-      ..writeByte(6) // number of fields
+      ..writeByte(7) // number of fields
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -72,6 +79,8 @@ class CalendarEventAdapter extends TypeAdapter<CalendarEvent> {
       ..writeByte(4)
       ..write(obj.location)
       ..writeByte(5)
-      ..write(obj.colorValue);
+      ..write(obj.colorValue)
+      ..writeByte(6)
+      ..write(obj.googleId);
   }
 }
