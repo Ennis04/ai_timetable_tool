@@ -2,6 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSCameraUsageDescription</key>
+	<string>I need the camera to scan your timetable.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>I need gallery access to pick timetable screenshots.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>I need this permission to transcribe your schedule requests.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>I need this permission to hear your schedule requests.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
