@@ -7,19 +7,13 @@ It is designed to run on **Android** and will later integrate AI features (e.g. 
 
 ## 👥 Collab (Teammate Setup)
 
-If you are joining the project, follow these steps to get the latest features:
+If you are joining the project:
 
 1. **Pull the development branch:**
    ```bash
-   git checkout ennis
-   git pull origin ennis
+   git checkout main
+   git pull origin main
    ```
-2. **Backend Setup:**
-   - Go to `backend/` folder.
-   - Create a `.env` file.
-   - Add your Gemini API Key: `GEMINI_API_KEY=your_key_here`.
-3. **Google Calendar Sync Setup:**
-   - Please refer to [Google Sync Guide](file:///C:/Users/ennis/.gemini/antigravity/brain/a88b7f39-509c-4bac-9b29-62d37279b963/fix_error_10.md) for detailed steps on registering your SHA-1.
 
 ---
 
@@ -35,8 +29,9 @@ Before running this project, make sure you have the following installed:
 
 ---
 
-## 🛠️ Step 1: Install Flutter (via VS Code – Recommended)
+## 🛠️ Flutter App Setup (Frontend)
 
+1️⃣ Install Flutter (VS Code – Recommended)
 1. Install **VS Code**
 2. Open VS Code → Extensions
 3. Install:
@@ -52,10 +47,9 @@ Before running this project, make sure you have the following installed:
     ```bash
     flutter doctor
 
----
 
-## 🤖 Step 2: Install Android Studio
 
+2️⃣ Android Studio Setup
 1. Download Android Studio:
     https://developer.android.com/studio
 
@@ -75,20 +69,18 @@ Ensure these are checked:
 
 Click **Apply** and wait for installation.
 
----
 
-## 📱 Step 3: Create an Android Emulator
 
+3️⃣ Create Emulator
 1. Open Android Studio
 2. Go to More Actions → Virtual Device Manager
 3. Create a device (e.g. Pixel 5)
 4. Choose Android 14 system image
 5. Finish and press ▶️ to start the emulator
 
----
 
-## 🧪 Step 4: Accept Android Licenses
 
+4️⃣ Accept Android Licenses
 In VS Code Terminal:
  ```bash
  flutter doctor --android-licenses
@@ -104,90 +96,132 @@ You should now see
  ```bash
  [✓] Android toolchain - develop for Android devices
 ```
----
 
-## 🚀 Step 5: Create the Flutter Project
 
-Open the project folder in VS Code and run:
- ```bash
- flutter create .
-```
 
-This generates
- ```bash
- lib/
- android/
- ios/
- windows/
- pubspec.yaml
-```
----
-
-## ▶️ Step 6: Run the App
-
+5️⃣ Run the App
 Make sure the Android emulator is running.
 
 Then in VS Code terminal:
  ```bash
- flutter run
+    flutter clean
+    flutter pub get
+    flutter run
 ```
 
 The app will build and launch on the emulator
 
 ---
 
-## 🧩 Step 7: Main Entry File
+🔐 Environment Variables (.env)
+⚠️ DO NOT COMMIT API KEYS
 
-The app starts from:
- ```bash
- lib/main.dart
+This project uses .env files.
+
+Add this to .gitignore:
+```bash
+    .env
 ```
 
-Any UI or logic changes should be made in this file or files inside the lib/ directory.
+---
 
-After editing code:
+🗺️ OpenRouteService (ORS) API Key (Frontend)
+Used for ETA calculation and leave-time reminders.
 
-Press Save → hot reload happens automatically
+1️⃣ Get ORS API Key
+1. Go to https://openrouteservice.org/
+2. Create an account
+3. Generate an API key
 
-Or press R in terminal for full restart
+
+2️⃣ Create .env (Frontend)
+Create .env in the project root (same level as pubspec.yaml):
+```bash
+    ORS_API_KEY=your_ors_key_here
+```
+
+---
+
+## 🤖 Backend Setup
+
+1️⃣ Backend Folder
+```bash
+    cd backend
+```
+
+
+2️⃣ Create Backend .env
+Inside backend/:
+```bash
+    GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+
+3️⃣ Get Gemini API Key
+1. Visit: https://aistudio.google.com/
+2. Create a project
+3. Generate API key
+4. Copy key into .env
+
+
+4️⃣ Install Backend Dependencies
+```bash
+    pip install -r requirements.txt
+```
+
+
+5️⃣ Run Backend
+```bash
+    uvicorn main:app --reload --host 127.0.0.1 --port 8000
+```
+Make sure the backend is running before using AI features in the app.
+
+---
+
+## 🔔 Notifications & Time-Based Features
+1. Notifications depend on emulator time
+2. Always ensure emulator time matches real time:
+    Settings → System → Date & time
+    Enable Network-provided time
+4. Avoid wiping emulator data (resets time)
+
+---
+
+## 📂 Project Structure
+```bash
+    lib/                → Flutter source
+    android/            → Android config
+    backend/            → AI backend
+    ios/                → iOS config (future)
+    pubspec.yaml        → Flutter dependencies
+    .env                → API keys (NOT committed)
+    .env.example        → Example env file
+```
 
 ---
 
 ## 🧹 Useful Commands
-
-Clean and rebuild:
- ```bash
- flutter clean
- flutter pub get
- flutter run
+Clean & rebuild:
+```bash
+    flutter clean
+    flutter pub get
+    flutter run
 ```
 
-Check devices:
- ```bash
- flutter devices
+Check devices
+```bash
+    flutter devices
 ```
 
 ---
 
-## 📂 Project Structure (Important)
-    lib/          → Dart source code
-    android/      → Android-specific files
-    ios/          → iOS-specific files
-    windows/      → Windows desktop support
-    pubspec.yaml  → Dependencies & project config
-
----
-
-## ✅ Troubleshooting
-
-If flutter command is not found:
-1. Use VS Code terminal
-2. Or add Flutter bin folder to system PATH
-
-If app does not update:
-
-1. Press R for hot restart
-2. Or stop (q) and rerun flutter run
+### ⚠️ Common Issues
+1. App crashes on startup
+    .env missing or not registered in pubspec.yaml
+2. No notifications
+    Emulator time incorrect
+    Notification permission not granted
+    Event scheduled in the past
 
 ---
 

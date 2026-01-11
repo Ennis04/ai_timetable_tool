@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
-
+import 'package:table_calendar/table_calendar.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/calendar_event.dart';
 import '../storage/event_store.dart';
 import '../widgets/event_tile.dart';
-import 'event_editor.dart';
 import 'ai_assistant_screen.dart';
+import 'event_editor.dart';
 import '../services/google_calendar_service.dart';
+import '../services/leave_time_planner.dart';
+import '../services/ors_eta_service.dart';
+import '../services/reminder_service.dart';
 
 class CalendarHomeScreen extends StatefulWidget {
   const CalendarHomeScreen({super.key});
@@ -19,6 +22,13 @@ class CalendarHomeScreen extends StatefulWidget {
 class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
   final store = EventStore();
 
+  // ✅ Put ORS key here (better: load from env/secure storage later)
+  
+final String orsApiKey = dotenv.env['ORS_API_KEY'] ?? '';
+
+  late final LeaveTimePlanner _planner =
+    LeaveTimePlanner(OrsEtaService(orsApiKey));
+
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
 
@@ -28,13 +38,28 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
   @override
   void initState() {
     super.initState();
+
+    assert(
+      orsApiKey.isNotEmpty,
+      'ORS_API_KEY missing. Check your .env file.',
+    );
+
     _loadDay(_selectedDay);
+    _scheduleUpcomingReminders(); // schedule on launch
   }
 
   Future<void> _loadDay(DateTime day) async {
     final events = await store.byDay(day);
     if (!mounted) return;
     setState(() => _dayEvents = events);
+  }
+
+  Future<void> _scheduleUpcomingReminders() async {
+    final events = await store.upcoming(days: 7);
+
+    for (final e in events) {
+      await _planner.planForEvent(e);
+    }
   }
 
   Future<void> _addEvent() async {
@@ -45,7 +70,9 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
       ),
     );
     if (created == null) return;
+
     await store.upsert(created);
+    await _scheduleUpcomingReminders();
     await _loadDay(_selectedDay);
   }
 
@@ -53,42 +80,45 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
     final updated = await Navigator.push<CalendarEvent>(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            EventEditorScreen(initialDay: _selectedDay, existing: e),
+        builder: (_) => EventEditorScreen(
+          initialDay: _selectedDay,
+          existing: e,
+        ),
       ),
     );
     if (updated == null) return;
+
     await store.upsert(updated);
+    await _scheduleUpcomingReminders();
     await _loadDay(_selectedDay);
   }
 
   Future<void> _deleteEvent(CalendarEvent e) async {
     await store.delete(e.id);
+    await ReminderService.instance.cancel(e.id.hashCode & 0x7fffffff);
+    await _scheduleUpcomingReminders();
     await _loadDay(_selectedDay);
   }
 
-  // ✅ NEW: open AI and refresh after Apply
   Future<void> _openAiAssistant() async {
-    // We expect a DateTime? (The date of the new event)
     final result = await Navigator.push<DateTime?>(
       context,
       MaterialPageRoute(builder: (_) => const AiAssistantScreen()),
     );
 
-    // If we got a date, jump to it and reload
     if (result != null) {
       setState(() {
         _selectedDay = result;
         _focusedDay = result;
       });
       await _loadDay(result);
+      await _scheduleUpcomingReminders();
     }
   }
 
   Future<void> _syncGoogle() async {
     setState(() => _isSyncing = true);
 
-    // Optional feedback
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Syncing with Google Calendar...'),
@@ -98,11 +128,14 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
 
     try {
       await GoogleCalendarService().signInAndLoadEvents();
+
+      await _scheduleUpcomingReminders();
       await _loadDay(_selectedDay);
+
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Sync complete!')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sync complete!')),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -114,9 +147,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _isSyncing = false);
-      }
+      if (mounted) setState(() => _isSyncing = false);
     }
   }
 
@@ -190,7 +221,6 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 10),
-
           if (_dayEvents.isEmpty)
             const Padding(
               padding: EdgeInsets.only(top: 12),

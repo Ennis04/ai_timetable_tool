@@ -5,7 +5,7 @@ class EventStore {
   static const String _boxName = 'eventsBox';
 
   Future<Box<CalendarEvent>> _box() async {
-    return await Hive.openBox<CalendarEvent>(_boxName);
+    return Hive.openBox<CalendarEvent>(_boxName);
   }
 
   Future<void> upsert(CalendarEvent event) async {
@@ -18,11 +18,6 @@ class EventStore {
     await box.delete(id);
   }
 
-  Future<List<CalendarEvent>> all() async {
-    final box = await _box();
-    return box.values.toList();
-  }
-
   Future<List<CalendarEvent>> byDay(DateTime day) async {
     final box = await _box();
 
@@ -30,35 +25,52 @@ class EventStore {
     final endOfDay = startOfDay.add(const Duration(days: 1));
 
     final events = box.values.where((e) {
-      // event overlaps with day
       return e.start.isBefore(endOfDay) && e.end.isAfter(startOfDay);
     }).toList();
 
-    // sort by start time
     events.sort((a, b) => a.start.compareTo(b.start));
     return events;
   }
 
-  /// Syncs Google events into the local store, avoiding duplicates by googleId.
+  Future<List<CalendarEvent>> upcoming({int days = 7}) async {
+    final box = await _box();
+    final now = DateTime.now();
+    final end = now.add(Duration(days: days));
+
+    final events = box.values.where((e) {
+      return e.start.isAfter(now) && e.start.isBefore(end);
+    }).toList();
+
+    events.sort((a, b) => a.start.compareTo(b.start));
+    return events;
+  }
+
+  /// Merge Google events into Hive using googleId matching.
+  /// Local ID stays stable when updating an existing google event.
   Future<void> syncGoogleEvents(List<CalendarEvent> incoming) async {
     final box = await _box();
     final allEvents = box.values.toList();
 
-    for (final incomingEvent in incoming) {
-      if (incomingEvent.googleId == null) continue;
+    for (final inc in incoming) {
+      if (inc.googleId == null) continue;
 
-      // Find existing event with same googleId
-      final existingIndex = allEvents.indexWhere(
-        (e) => e.googleId == incomingEvent.googleId,
+      final existing = allEvents.firstWhere(
+        (e) => e.googleId == inc.googleId,
+        orElse: () => CalendarEvent(
+          id: '',
+          title: '',
+          start: DateTime.now(),
+          end: DateTime.now(),
+          location: '',
+          colorValue: 0,
+        ),
       );
 
-      if (existingIndex != -1) {
-        // Update existing (preserving the same local id if we want, or just overwriting)
-        final existing = allEvents[existingIndex];
-        await box.put(existing.id, incomingEvent.copyWith());
+      if (existing.id.isNotEmpty) {
+        // overwrite using the existing local key
+        await box.put(existing.id, inc.copyWith());
       } else {
-        // Add new
-        await box.put(incomingEvent.id, incomingEvent);
+        await box.put(inc.id, inc);
       }
     }
   }
