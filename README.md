@@ -5,6 +5,24 @@ It is designed to run on **Android** and will later integrate AI features (e.g. 
 
 ---
 
+## 👥 Collab (Teammate Setup)
+
+If you are joining the project, follow these steps to get the latest features:
+
+1. **Pull the development branch:**
+   ```bash
+   git checkout ennis
+   git pull origin ennis
+   ```
+2. **Backend Setup:**
+   - Go to `backend/` folder.
+   - Create a `.env` file.
+   - Add your Gemini API Key: `GEMINI_API_KEY=your_key_here`.
+3. **Google Calendar Sync Setup:**
+   - Please refer to [Google Sync Guide](file:///C:/Users/ennis/.gemini/antigravity/brain/a88b7f39-509c-4bac-9b29-62d37279b963/fix_error_10.md) for detailed steps on registering your SHA-1.
+
+---
+
 ## 📦 Requirements
 
 Before running this project, make sure you have the following installed:

@@ -31,6 +31,10 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.2.2
+  google_sign_in: ^6.2.1
+  googleapis: ^13.2.0
+  googleapis_auth: ^1.6.0
+  extension_google_sign_in_as_googleapis_auth: ^2.0.12
 
   table_calendar: ^3.1.2
   hive: ^2.2.3
