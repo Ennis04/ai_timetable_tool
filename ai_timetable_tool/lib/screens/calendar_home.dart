@@ -246,7 +246,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                   child: EventTile(event: e, onTap: () => _editEvent(e)),
                 ),
               );
-            }).toList(),
+            }),
         ],
       ),
     );
