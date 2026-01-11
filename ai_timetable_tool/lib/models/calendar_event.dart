@@ -41,17 +41,21 @@ class CalendarEventAdapter extends TypeAdapter<CalendarEvent> {
 
   @override
   CalendarEvent read(BinaryReader reader) {
-    final fields = Map<int, dynamic>.fromIterables(
-      List<int>.generate(reader.readByte(), (_) => reader.readByte()),
-      List<dynamic>.generate(reader.readByte(), (_) => reader.read()),
-    );
+    final numOfFields = reader.readByte();
+    final fields = <int, dynamic>{};
+    for (var i = 0; i < numOfFields; i++) {
+      final index = reader.readByte();
+      fields[index] = reader.read();
+    }
 
     // Fallback-safe reads
     return CalendarEvent(
       id: (fields[0] as String?) ?? '',
       title: (fields[1] as String?) ?? 'Untitled',
       start: (fields[2] as DateTime?) ?? DateTime.now(),
-      end: (fields[3] as DateTime?) ?? DateTime.now().add(const Duration(hours: 1)),
+      end:
+          (fields[3] as DateTime?) ??
+          DateTime.now().add(const Duration(hours: 1)),
       location: (fields[4] as String?) ?? '',
       colorValue: (fields[5] as int?) ?? 0xFF007AFF,
     );

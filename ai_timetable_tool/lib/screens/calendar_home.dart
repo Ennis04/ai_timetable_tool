@@ -38,7 +38,9 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
   Future<void> _addEvent() async {
     final created = await Navigator.push<CalendarEvent>(
       context,
-      MaterialPageRoute(builder: (_) => EventEditorScreen(initialDay: _selectedDay)),
+      MaterialPageRoute(
+        builder: (_) => EventEditorScreen(initialDay: _selectedDay),
+      ),
     );
     if (created == null) return;
     await store.upsert(created);
@@ -48,7 +50,10 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
   Future<void> _editEvent(CalendarEvent e) async {
     final updated = await Navigator.push<CalendarEvent>(
       context,
-      MaterialPageRoute(builder: (_) => EventEditorScreen(initialDay: _selectedDay, existing: e)),
+      MaterialPageRoute(
+        builder: (_) =>
+            EventEditorScreen(initialDay: _selectedDay, existing: e),
+      ),
     );
     if (updated == null) return;
     await store.upsert(updated);
@@ -62,14 +67,19 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
 
   // ✅ NEW: open AI and refresh after Apply
   Future<void> _openAiAssistant() async {
-    final changed = await Navigator.push<bool>(
+    // We expect a DateTime? (The date of the new event)
+    final result = await Navigator.push<DateTime?>(
       context,
       MaterialPageRoute(builder: (_) => const AiAssistantScreen()),
     );
 
-    if (changed == true) {
-      // refresh current selected day
-      await _loadDay(_selectedDay);
+    // If we got a date, jump to it and reload
+    if (result != null) {
+      setState(() {
+        _selectedDay = result;
+        _focusedDay = result;
+      });
+      await _loadDay(result);
     }
   }
 
@@ -127,13 +137,19 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          Text(header, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          Text(
+            header,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 10),
 
           if (_dayEvents.isEmpty)
             const Padding(
               padding: EdgeInsets.only(top: 12),
-              child: Text('No events. Tap + to add one.', style: TextStyle(color: Colors.grey)),
+              child: Text(
+                'No events. Tap + to add one.',
+                style: TextStyle(color: Colors.grey),
+              ),
             )
           else
             ..._dayEvents.map((e) {
@@ -145,7 +161,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                     alignment: Alignment.centerLeft,
                     padding: const EdgeInsets.only(left: 16),
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.15),
+                      color: Colors.red.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: const Icon(Icons.delete, color: Colors.red),
@@ -154,7 +170,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                     alignment: Alignment.centerRight,
                     padding: const EdgeInsets.only(right: 16),
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.15),
+                      color: Colors.red.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: const Icon(Icons.delete, color: Colors.red),
@@ -166,8 +182,14 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                         title: const Text('Delete event?'),
                         content: Text('Delete "${e.title}"?'),
                         actions: [
-                          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-                          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('Delete'),
+                          ),
                         ],
                       ),
                     );

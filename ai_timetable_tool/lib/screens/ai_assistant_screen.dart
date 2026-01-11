@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:speech_to_text/speech_to_text.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../models/calendar_event.dart';
 import '../storage/event_store.dart';
@@ -17,6 +20,15 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
 
+  // --- VOICE VARIABLES ---
+  final SpeechToText _speechToText = SpeechToText();
+  bool _speechEnabled = false;
+  bool _isListening = false;
+
+  // --- IMAGE VARIABLES ---
+  final ImagePicker _picker = ImagePicker();
+  File? _selectedImage;
+
   bool _loading = false;
 
   // Chat history
@@ -24,9 +36,6 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
 
   // Parsed actions (preview)
   List<_AiCreateAction> _preview = [];
-
-  // For debugging / fallback
-  String _rawJson = '';
 
   // Quick prompts
   final List<String> _suggestions = const [
@@ -36,48 +45,131 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     'Add Meeting next Monday 9am–10am at Online',
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    _initSpeech();
+  }
+
+  /// Initialize the microphone engine
+  void _initSpeech() async {
+    _speechEnabled = await _speechToText.initialize();
+    if (mounted) setState(() {});
+  }
+
+  /// Toggle microphone recording
+  void _toggleListening() async {
+    if (!_speechEnabled) return;
+
+    if (_isListening) {
+      await _speechToText.stop();
+      setState(() => _isListening = false);
+    } else {
+      await _speechToText.listen(
+        onResult: (result) {
+          setState(() {
+            _controller.text = result.recognizedWords;
+            // Keep cursor at the end
+            _controller.selection = TextSelection.fromPosition(
+              TextPosition(offset: _controller.text.length),
+            );
+          });
+        },
+      );
+      setState(() => _isListening = true);
+    }
+  }
+
+  /// Pick an image from Camera or Gallery
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? photo = await _picker.pickImage(
+        source: source,
+        imageQuality: 50, // Compress to speed up upload
+      );
+      if (photo == null) return;
+
+      setState(() {
+        _selectedImage = File(photo.path);
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error picking image: $e")));
+    }
+  }
+
+  void _removeImage() {
+    setState(() => _selectedImage = null);
+  }
+
+  /// Send request to Python Backend
   Future<void> _send() async {
     final text = _controller.text.trim();
-    if (text.isEmpty || _loading) return;
+
+    // Validate: Must have text OR image to send
+    if ((text.isEmpty && _selectedImage == null) || _loading) return;
+
+    // Stop listening if we hit send while talking
+    if (_isListening) {
+      await _speechToText.stop();
+      setState(() => _isListening = false);
+    }
 
     setState(() {
       _loading = true;
       _preview = [];
-      _rawJson = '';
-      _chat.add(_ChatItem.user(text));
+
+      // Create a user message for the chat bubble
+      String displayMsg = text;
+      if (_selectedImage != null) {
+        displayMsg = text.isEmpty ? "[Sent an Image]" : "[Image] $text";
+      }
+      _chat.add(_ChatItem.user(displayMsg));
     });
 
     _controller.clear();
     _scrollToBottom();
 
+    // --- PREPARE DATA ---
+    String? base64Image;
+    if (_selectedImage != null) {
+      final bytes = await _selectedImage!.readAsBytes();
+      base64Image = base64Encode(bytes);
+    }
+
+    // IMPORTANT: Use 10.0.2.2 for Android Emulator. Use your Real IP for physical devices.
+    const String apiUrl = "http://10.0.2.2:8000/ai/parse";
+
     try {
       final response = await http.post(
-        Uri.parse("http://10.0.2.2:8000/ai/parse"),
+        Uri.parse(apiUrl),
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"text": text}),
+        body: jsonEncode({
+          "text": text.isEmpty
+              ? "Extract event details from this image."
+              : text,
+          "image": base64Image, // Sending the image data
+        }),
       );
 
-      setState(() {
-        _rawJson = response.body;
-      });
-
       if (response.statusCode != 200) {
-        setState(() {
-          _loading = false;
-          _chat.add(_ChatItem.assistant(
-            "I couldn't process that. Backend error:\n${response.body}",
-            isError: true,
-          ));
-        });
-        _scrollToBottom();
-        return;
+        throw Exception(
+          "Backend error: ${response.statusCode}\n${response.body}",
+        );
       }
 
       final decoded = jsonDecode(response.body);
+
+      // Check if Python sent a specific error message
+      if (decoded is Map && decoded.containsKey('error')) {
+        throw Exception(decoded['error']);
+      }
+
       final actions = decoded['actions'];
 
       if (actions is! List) {
-        throw Exception("Invalid response: actions is not a list");
+        throw Exception("Invalid response: 'actions' is not a list");
       }
 
       final parsed = <_AiCreateAction>[];
@@ -89,17 +181,22 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
 
       setState(() {
         _loading = false;
+        _selectedImage = null; // Clear image after successful send
         _preview = parsed;
 
         if (parsed.isEmpty) {
-          _chat.add(_ChatItem.assistant(
-            "I understood your message, but I couldn't find any event to create. Try including a date/time.",
-            isError: true,
-          ));
+          _chat.add(
+            _ChatItem.assistant(
+              "I couldn't find any events to create. Try providing more details.",
+              isError: true,
+            ),
+          );
         } else {
-          _chat.add(_ChatItem.assistant(
-            "I found ${_preview.length} event(s). Review below, then tap Apply.",
-          ));
+          _chat.add(
+            _ChatItem.assistant(
+              "I found ${_preview.length} event(s). Review below, then tap Apply.",
+            ),
+          );
         }
       });
 
@@ -107,21 +204,24 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     } catch (e) {
       setState(() {
         _loading = false;
-        _chat.add(_ChatItem.assistant(
-          "Request failed: $e",
-          isError: true,
-        ));
+        _chat.add(_ChatItem.assistant("Request failed: $e", isError: true));
       });
       _scrollToBottom();
     }
   }
 
   Future<void> _apply() async {
-    if (_preview.isEmpty) return;
+    print("DEBUG: Apply button clicked"); // 1. Check if button works
+
+    if (_preview.isEmpty) {
+      print("DEBUG: Preview is empty, returning");
+      return;
+    }
 
     final store = EventStore();
     final eventsToAdd = <CalendarEvent>[];
 
+    // Build the list of events
     for (final a in _preview) {
       final repeat = a.repeat;
       final count = a.count;
@@ -130,41 +230,66 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         final start = _shiftDate(a.start, repeat, i);
         final end = _shiftDate(a.end, repeat, i);
 
-        eventsToAdd.add(CalendarEvent(
-          id: "${DateTime.now().microsecondsSinceEpoch}_$i",
-          title: a.title,
-          start: start,
-          end: end,
-          location: a.location,
-          // You can change this later to a theme color or “AI tag” color
-          colorValue: 0xFF007AFF,
-        ));
+        eventsToAdd.add(
+          CalendarEvent(
+            id: "${DateTime.now().microsecondsSinceEpoch}_$i",
+            title: a.title,
+            start: start,
+            end: end,
+            location: a.location,
+            colorValue: 0xFF007AFF,
+          ),
+        );
       }
     }
+    print("DEBUG: Prepared ${eventsToAdd.length} events to add");
 
-    final conflicts = await _findConflicts(store, eventsToAdd);
+    // Check conflicts
+    try {
+      final conflicts = await _findConflicts(store, eventsToAdd);
+      print("DEBUG: Checked conflicts, found: ${conflicts.length}");
 
-    if (conflicts.isNotEmpty) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text("Schedule conflict"),
-          content: Text(
-            "Some events overlap existing ones.\n\n"
-            "Example:\n${conflicts.first}\n\n"
-            "Apply anyway?",
+      if (conflicts.isNotEmpty) {
+        if (!mounted) return;
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text("Schedule conflict"),
+            content: SingleChildScrollView(
+              child: Text(
+                "Overlap detected: ${conflicts.first}\nApply anyway?",
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text("Cancel"),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text("Apply"),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
-            TextButton(onPressed: () => Navigator.pop(context, true), child: const Text("Apply")),
-          ],
-        ),
-      );
-      if (ok != true) return;
+        );
+        if (ok != true) {
+          print("DEBUG: User cancelled conflict dialog");
+          return;
+        }
+      }
+    } catch (e) {
+      print("DEBUG: Error checking conflicts: $e");
     }
 
-    for (final e in eventsToAdd) {
-      await store.upsert(e);
+    // Save to Database
+    try {
+      for (final e in eventsToAdd) {
+        await store.upsert(e);
+      }
+      print("DEBUG: Saved events to Hive database");
+    } catch (e) {
+      print("DEBUG: CRASH saving to database: $e");
+      // If it crashes here, the screen won't close
     }
 
     if (!mounted) return;
@@ -173,7 +298,15 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       SnackBar(content: Text("Added ${eventsToAdd.length} event(s)")),
     );
 
-    Navigator.pop(context, true);
+    // Close screen and return Date
+    if (eventsToAdd.isNotEmpty) {
+      print(
+        "DEBUG: Closing screen, returning date: ${eventsToAdd.first.start}",
+      );
+      Navigator.pop(context, eventsToAdd.first.start);
+    } else {
+      Navigator.pop(context, null);
+    }
   }
 
   DateTime _shiftDate(DateTime dt, String repeat, int i) {
@@ -183,7 +316,10 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     return dt;
   }
 
-  Future<List<String>> _findConflicts(EventStore store, List<CalendarEvent> toAdd) async {
+  Future<List<String>> _findConflicts(
+    EventStore store,
+    List<CalendarEvent> toAdd,
+  ) async {
     final conflicts = <String>[];
 
     for (final e in toAdd) {
@@ -201,7 +337,12 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     return conflicts;
   }
 
-  bool _overlaps(DateTime aStart, DateTime aEnd, DateTime bStart, DateTime bEnd) {
+  bool _overlaps(
+    DateTime aStart,
+    DateTime aEnd,
+    DateTime bStart,
+    DateTime bEnd,
+  ) {
     return aStart.isBefore(bEnd) && aEnd.isAfter(bStart);
   }
 
@@ -218,10 +359,40 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     });
   }
 
+  /// Show bottom sheet to choose Camera or Gallery
+  void _showImageSourceSheet() {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Camera'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _controller.dispose();
     _scrollController.dispose();
+    _speechToText.stop(); // Stop listening
     super.dispose();
   }
 
@@ -251,13 +422,14 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         child: Column(
           children: [
             // Suggestions chips (only show when chat is empty)
-            if (_chat.isEmpty) _SuggestionBar(
-              suggestions: _suggestions,
-              onTap: (s) {
-                _controller.text = s;
-                _send();
-              },
-            ),
+            if (_chat.isEmpty && _preview.isEmpty)
+              _SuggestionBar(
+                suggestions: _suggestions,
+                onTap: (s) {
+                  _controller.text = s;
+                  _send();
+                },
+              ),
 
             // Chat + Preview
             Expanded(
@@ -273,7 +445,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                       },
                     ),
 
-                  ..._chat.map((m) => _ChatBubble(item: m)).toList(),
+                  ..._chat.map((m) => _ChatBubble(item: m)),
 
                   if (_loading)
                     const Padding(
@@ -288,23 +460,143 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                       subtitle: "${_preview.length} event(s)",
                     ),
                     const SizedBox(height: 10),
-                    ..._preview.map((a) => _PreviewCard(action: a)).toList(),
-                    const SizedBox(height: 90), // space for composer
+                    ..._preview.map((a) => _PreviewCard(action: a)),
                   ],
-
-                  // If no preview, still leave space for composer
-                  if (_preview.isEmpty) const SizedBox(height: 90),
                 ],
               ),
             ),
 
-            // Composer
-            Padding(
-              padding: EdgeInsets.fromLTRB(12, 8, 12, 12 + (bottomInset > 0 ? 0 : 0)),
-              child: _Composer(
-                controller: _controller,
-                loading: _loading,
-                onSend: _send,
+            // --- IMAGE PREVIEW AREA (Above the composer) ---
+            if (_selectedImage != null)
+              Container(
+                margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(
+                        _selectedImage!,
+                        height: 50,
+                        width: 50,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        "Image attached",
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.grey),
+                      onPressed: _removeImage,
+                    ),
+                  ],
+                ),
+              ),
+
+            // --- COMPOSER WITH MIC & CAMERA ---
+            Container(
+              padding: EdgeInsets.fromLTRB(
+                12,
+                8,
+                12,
+                12 + (bottomInset > 0 ? 0 : 0),
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    offset: const Offset(0, -2),
+                    blurRadius: 10,
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  // 1. Camera Button
+                  IconButton(
+                    icon: const Icon(
+                      Icons.camera_alt_outlined,
+                      color: Colors.blue,
+                    ),
+                    onPressed: _showImageSourceSheet,
+                  ),
+
+                  // 2. Microphone Button
+                  GestureDetector(
+                    onTap: _toggleListening,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: _isListening
+                            ? Colors.redAccent
+                            : Colors.grey.shade100,
+                        shape: BoxShape.circle,
+                        boxShadow: _isListening
+                            ? [
+                                BoxShadow(
+                                  color: Colors.redAccent.withValues(
+                                    alpha: 0.4,
+                                  ),
+                                  blurRadius: 10,
+                                  spreadRadius: 2,
+                                ),
+                              ]
+                            : [],
+                      ),
+                      child: Icon(
+                        _isListening ? Icons.mic : Icons.mic_none,
+                        color: _isListening ? Colors.white : Colors.black54,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // 3. Text Field
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: TextField(
+                        controller: _controller,
+                        minLines: 1,
+                        maxLines: 4,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _loading ? null : _send(),
+                        decoration: const InputDecoration(
+                          hintText: "Type, speak, or snap...",
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(vertical: 10),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // 4. Send Button
+                  IconButton.filled(
+                    onPressed: _loading ? null : _send,
+                    icon: const Icon(Icons.arrow_upward),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -314,7 +606,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   }
 }
 
-// ---------------- UI helpers ----------------
+// ---------------- UI Helpers ----------------
 
 class _IntroCard extends StatelessWidget {
   final void Function(String) onExampleTap;
@@ -339,7 +631,7 @@ class _IntroCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            "I’ll convert it into calendar events for you.",
+            "I’ll convert it into calendar events for you. You can also scan a timetable image!",
             style: TextStyle(color: Colors.black54),
           ),
           const SizedBox(height: 12),
@@ -347,11 +639,20 @@ class _IntroCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _ExamplePill(text: "Add AI lecture tomorrow 10–12 DK1", onTap: onExampleTap),
-              _ExamplePill(text: "Every Monday 8–10am for 12 weeks", onTap: onExampleTap),
-              _ExamplePill(text: "Study Sat 2–4pm Library", onTap: onExampleTap),
+              _ExamplePill(
+                text: "Add AI lecture tomorrow 10–12 DK1",
+                onTap: onExampleTap,
+              ),
+              _ExamplePill(
+                text: "Every Monday 8–10am for 12 weeks",
+                onTap: onExampleTap,
+              ),
+              _ExamplePill(
+                text: "Study Sat 2–4pm Library",
+                onTap: onExampleTap,
+              ),
             ],
-          )
+          ),
         ],
       ),
     );
@@ -410,10 +711,7 @@ class _SuggestionBar extends StatelessWidget {
               children: [
                 const Icon(Icons.auto_awesome, size: 14),
                 const SizedBox(width: 6),
-                Text(
-                  suggestions[i],
-                  style: const TextStyle(fontSize: 12),
-                ),
+                Text(suggestions[i], style: const TextStyle(fontSize: 12)),
               ],
             ),
           ),
@@ -432,7 +730,10 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        Text(
+          title,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+        ),
         const SizedBox(width: 8),
         Text(subtitle, style: const TextStyle(color: Colors.black54)),
       ],
@@ -481,12 +782,24 @@ class _PreviewCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(action.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                Text(
+                  action.title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
                 const SizedBox(height: 6),
-                Text("$start – $endTime", style: const TextStyle(color: Colors.black54)),
+                Text(
+                  "$start – $endTime",
+                  style: const TextStyle(color: Colors.black54),
+                ),
                 if (action.location.isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text(action.location, style: const TextStyle(color: Colors.black54)),
+                  Text(
+                    action.location,
+                    style: const TextStyle(color: Colors.black54),
+                  ),
                 ],
                 const SizedBox(height: 8),
                 Wrap(
@@ -519,7 +832,10 @@ class _Tag extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: Colors.black12),
       ),
-      child: Text(label, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 12, color: Colors.black87),
+      ),
     );
   }
 }
@@ -541,64 +857,15 @@ class _TypingIndicator extends StatelessWidget {
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
             SizedBox(width: 10),
             Text("Thinking…"),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _Composer extends StatelessWidget {
-  final TextEditingController controller;
-  final bool loading;
-  final VoidCallback onSend;
-
-  const _Composer({
-    required this.controller,
-    required this.loading,
-    required this.onSend,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.black12),
-        boxShadow: const [
-          BoxShadow(
-            blurRadius: 12,
-            offset: Offset(0, 8),
-            color: Color(0x0A000000),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              minLines: 1,
-              maxLines: 4,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => loading ? null : onSend(),
-              decoration: const InputDecoration(
-                hintText: "Type a schedule…",
-                border: InputBorder.none,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton.filled(
-            onPressed: loading ? null : onSend,
-            icon: const Icon(Icons.arrow_upward),
-          ),
-        ],
       ),
     );
   }
@@ -623,7 +890,9 @@ class _ChatBubble extends StatelessWidget {
               ? const Color(0xFF007AFF)
               : (item.isError ? const Color(0xFFFFEAEA) : Colors.white),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: isUser ? Colors.transparent : Colors.black12),
+          border: Border.all(
+            color: isUser ? Colors.transparent : Colors.black12,
+          ),
           boxShadow: isUser
               ? const []
               : const [
@@ -637,7 +906,9 @@ class _ChatBubble extends StatelessWidget {
         child: Text(
           item.text,
           style: TextStyle(
-            color: isUser ? Colors.white : (item.isError ? Colors.red.shade700 : Colors.black87),
+            color: isUser
+                ? Colors.white
+                : (item.isError ? Colors.red.shade700 : Colors.black87),
           ),
         ),
       ),
@@ -645,7 +916,7 @@ class _ChatBubble extends StatelessWidget {
   }
 }
 
-// ---------------- Data helpers ----------------
+// ---------------- Data Helpers ----------------
 
 enum _Role { user, assistant }
 
@@ -661,7 +932,7 @@ class _ChatItem {
       _ChatItem(_Role.assistant, text, isError: isError);
 }
 
-// ----- helper class for AI actions -----
+// ----- Helper class for AI actions -----
 
 class _AiCreateAction {
   final String title;
@@ -692,8 +963,23 @@ class _AiCreateAction {
     if (count < 1) count = 1;
     if (count > 60) count = 60;
 
-    final start = DateTime.parse((a['start'] ?? '').toString());
-    final end = DateTime.parse((a['end'] ?? '').toString());
+    final startStr = (a['start'] ?? '').toString();
+    final endStr = (a['end'] ?? '').toString();
+
+    // Basic fallback to "now" if parsing fails
+    DateTime start = DateTime.now();
+    DateTime end = DateTime.now().add(const Duration(hours: 1));
+
+    if (startStr.isNotEmpty) {
+      try {
+        start = DateTime.parse(startStr);
+      } catch (_) {}
+    }
+    if (endStr.isNotEmpty) {
+      try {
+        end = DateTime.parse(endStr);
+      } catch (_) {}
+    }
 
     return _AiCreateAction(
       title: title,

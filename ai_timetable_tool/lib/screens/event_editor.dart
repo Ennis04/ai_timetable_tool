@@ -51,6 +51,7 @@ class _EventEditorScreenState extends State<EventEditorScreen> {
       lastDate: DateTime(2035),
     );
     if (date == null) return null;
+    if (!mounted) return null;
 
     final time = await showTimePicker(
       context: context,
@@ -64,11 +65,15 @@ class _EventEditorScreenState extends State<EventEditorScreen> {
   void _save() {
     final title = _titleCtrl.text.trim();
     if (title.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Title cannot be empty')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Title cannot be empty')));
       return;
     }
     if (!_end.isAfter(_start)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('End time must be after start time')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('End time must be after start time')),
+      );
       return;
     }
 
@@ -92,12 +97,7 @@ class _EventEditorScreenState extends State<EventEditorScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(isEdit ? 'Edit Event' : 'New Event'),
-        actions: [
-          TextButton(
-            onPressed: _save,
-            child: const Text('Save'),
-          ),
-        ],
+        actions: [TextButton(onPressed: _save, child: const Text('Save'))],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -151,11 +151,31 @@ class _EventEditorScreenState extends State<EventEditorScreen> {
             spacing: 10,
             runSpacing: 10,
             children: [
-              _ColorDot(color: 0xFF007AFF, selected: _color == 0xFF007AFF, onTap: () => setState(() => _color = 0xFF007AFF)),
-              _ColorDot(color: 0xFF34C759, selected: _color == 0xFF34C759, onTap: () => setState(() => _color = 0xFF34C759)),
-              _ColorDot(color: 0xFFFF9500, selected: _color == 0xFFFF9500, onTap: () => setState(() => _color = 0xFFFF9500)),
-              _ColorDot(color: 0xFFFF3B30, selected: _color == 0xFFFF3B30, onTap: () => setState(() => _color = 0xFFFF3B30)),
-              _ColorDot(color: 0xFFAF52DE, selected: _color == 0xFFAF52DE, onTap: () => setState(() => _color = 0xFFAF52DE)),
+              _ColorDot(
+                color: 0xFF007AFF,
+                selected: _color == 0xFF007AFF,
+                onTap: () => setState(() => _color = 0xFF007AFF),
+              ),
+              _ColorDot(
+                color: 0xFF34C759,
+                selected: _color == 0xFF34C759,
+                onTap: () => setState(() => _color = 0xFF34C759),
+              ),
+              _ColorDot(
+                color: 0xFFFF9500,
+                selected: _color == 0xFFFF9500,
+                onTap: () => setState(() => _color = 0xFFFF9500),
+              ),
+              _ColorDot(
+                color: 0xFFFF3B30,
+                selected: _color == 0xFFFF3B30,
+                onTap: () => setState(() => _color = 0xFFFF3B30),
+              ),
+              _ColorDot(
+                color: 0xFFAF52DE,
+                selected: _color == 0xFFAF52DE,
+                onTap: () => setState(() => _color = 0xFFAF52DE),
+              ),
             ],
           ),
         ],
@@ -169,7 +189,11 @@ class _DateRow extends StatelessWidget {
   final String value;
   final VoidCallback onTap;
 
-  const _DateRow({required this.label, required this.value, required this.onTap});
+  const _DateRow({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -184,7 +208,10 @@ class _DateRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            SizedBox(width: 70, child: Text(label, style: const TextStyle(color: Colors.grey))),
+            SizedBox(
+              width: 70,
+              child: Text(label, style: const TextStyle(color: Colors.grey)),
+            ),
             Expanded(child: Text(value)),
             const Icon(Icons.chevron_right, color: Colors.grey),
           ],
@@ -199,7 +226,11 @@ class _ColorDot extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  const _ColorDot({required this.color, required this.selected, required this.onTap});
+  const _ColorDot({
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -212,7 +243,10 @@ class _ColorDot extends StatelessWidget {
         decoration: BoxDecoration(
           color: Color(color),
           shape: BoxShape.circle,
-          border: Border.all(color: selected ? Colors.black : Colors.transparent, width: 2),
+          border: Border.all(
+            color: selected ? Colors.black : Colors.transparent,
+            width: 2,
+          ),
         ),
       ),
     );

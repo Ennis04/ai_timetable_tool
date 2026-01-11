@@ -10,7 +10,8 @@ class EventTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final time = '${DateFormat.Hm().format(event.start)} – ${DateFormat.Hm().format(event.end)}';
+    final time =
+        '${DateFormat.Hm().format(event.start)} – ${DateFormat.Hm().format(event.end)}';
 
     return InkWell(
       onTap: onTap,
@@ -18,19 +19,30 @@ class EventTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Color(event.colorValue).withOpacity(0.10),
+          color: Color(event.colorValue).withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(14),
-          border: Border(left: BorderSide(color: Color(event.colorValue), width: 4)),
+          border: Border(
+            left: BorderSide(color: Color(event.colorValue), width: 4),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(event.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            Text(
+              event.title,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 4),
-            Text(time, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+            Text(
+              time,
+              style: const TextStyle(color: Colors.grey, fontSize: 13),
+            ),
             if (event.location.isNotEmpty) ...[
               const SizedBox(height: 2),
-              Text(event.location, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+              Text(
+                event.location,
+                style: const TextStyle(color: Colors.grey, fontSize: 13),
+              ),
             ],
           ],
         ),
