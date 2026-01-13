@@ -1224,12 +1224,12 @@ class _AiCreateAction {
 
     if (startStr.isNotEmpty) {
       try {
-        start = DateTime.parse(startStr);
+        start = DateTime.parse(startStr).toLocal();
       } catch (_) {}
     }
     if (endStr.isNotEmpty) {
       try {
-        end = DateTime.parse(endStr);
+        end = DateTime.parse(endStr).toLocal();
       } catch (_) {}
     }
 

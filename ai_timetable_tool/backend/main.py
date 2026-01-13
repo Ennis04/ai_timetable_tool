@@ -40,8 +40,8 @@ JSON Schema:
     {
       "type": "create",
       "title": "string",
-      "start": "ISO8601 datetime (YYYY-MM-DDTHH:MM:SS)",
-      "end": "ISO8601 datetime (YYYY-MM-DDTHH:MM:SS)",
+      "start": "ISO8601 datetime (YYYY-MM-DDTHH:MM:SS+08:00)",
+      "end": "ISO8601 datetime (YYYY-MM-DDTHH:MM:SS+08:00)",
       "location": "string",
       "repeat": "none|daily|weekly",
       "count": 1
@@ -50,7 +50,9 @@ JSON Schema:
 }
 
 Rules:
-- Use Asia/Kuala_Lumpur timezone.
+- STRICTLY use Asia/Kuala_Lumpur timezone (UTC+8).
+- Timestamps MUST include the +08:00 offset. Example: "2026-01-01T21:00:00+08:00".
+- Do NOT convert times to UTC.
 - Interpret relative dates (e.g., "today", "tomorrow", "next Monday") using the provided current datetime.
 - If end time missing, assume 1 hour duration.
 - If location missing, use empty string.
@@ -74,8 +76,10 @@ def parse_prompt(prompt: Prompt):
         # If there is an image, add it to the prompt
         if prompt.image:
             image_part = {
-                "mime_type": "image/jpeg",
-                "data": prompt.image
+                "inline_data": {
+                    "mime_type": "image/jpeg",
+                    "data": prompt.image
+                }
             }
             content_parts.append(image_part)
 
